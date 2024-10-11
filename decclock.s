@@ -256,38 +256,38 @@ get_day_of_month:
     mov       %r13, %rdi
     call      is_leap_year
     test      %rax, %rax
-    jz        .use_normal_array
+    jz        .L_use_normal_array
 
     # Leap year
     lea       cumulative_days_leap, %r14
-    jmp       .find_month
+    jmp       .L_find_month
 
-.use_normal_array:
+.L_use_normal_array:
     lea       cumulative_days_normal, %r14
 
-.find_month:
+.L_find_month:
     xor       %rbx, %rbx                        # rbx = month index (0-11)
 
-.month_loop:
+.L_month_loop:
     mov       (%r14, %rbx, 4), %eax             # Load cumulative days
     cmp       %r12d, %eax
-    jg        .month_found
+    jg        .L_month_found
     inc       %rbx
     cmp       $11, %rbx
-    jle       .month_loop
+    jle       .L_month_loop
 
-.month_found:
+.L_month_found:
     # Calculate day of month
     test      %rbx, %rbx
-    jz        .first_month
+    jz        .L_first_month
     mov       -4(%r14, %rbx, 4), %eax           # Load previous month's cumulative days
     sub       %eax, %r12d                       # Subtract from day of year
-    jmp       .calc_day
+    jmp       .L_calc_day
 
-.first_month:
+.L_first_month:
     inc       %r12d                             # For January, just add 1 to day of year
 
-.calc_day:
+.L_calc_day:
     lea       1(%rbx), %rax                     # Return month (1-12) in rax
     mov       %r12d, %edx                       # Return day of month in rdx
 
