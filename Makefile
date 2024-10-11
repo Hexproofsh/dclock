@@ -12,3 +12,6 @@ decclock: decclock.o
 
 clean:
 	rm -rf *.o decclock
+
+install:
+	cp decclock /usr/local/bin
