@@ -32,11 +32,15 @@
 # be set in a config file soon.
 .set TIMEZONE_OFFSET, -6 * 3600
 
+.set NANO_PER_DAY, 86400000000000
+
 # ---------- DATA ----------
      .data
 
+.align 64
 cumulative_days_normal:
     .long 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365
+.align 64
 cumulative_days_leap:
     .long 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366
 
@@ -62,6 +66,11 @@ newline:
 
      .bss
 
+# Our timespec struct for simplicity
+# tv_sec  - 8 bytes
+# tv_nsec - 8 bytes
+#
+# This way we can access tv_nsec by doing timespec+8
 .align 8
 timespec:
     .space 16
@@ -95,10 +104,11 @@ _start:
     leaq      timespec, %rsi
     syscall
 
-    movq      timespec, %rax
-    addq      $TIMEZONE_OFFSET, %rax 
-    movq      %rax, timespec
-    
+    # Throughout the calls we would be calculating everything with the number of seconds/nano
+    # seconds since epoch. We need to apply a timezone offset to adjust the UTC time to our
+    # local timezone.
+    addq      $TIMEZONE_OFFSET, timespec
+
     # Get year and day of year
     movq      timespec, %rdi
     call      get_year_from_epoch_sec
@@ -124,22 +134,31 @@ _start:
     call      get_hms
     # %rax = hours, %rdx = minutes, %rcx = seconds
 
-    # Calculate nanos_today
-    imulq     $3600, %rax
-    imulq     $60, %rdx
+    # We decided on nanoseconds instead of ms for precision (as much as we could) and we break
+    # down the hour, minutes to seconds and add them to the remaining seconds in %rcx so we can
+    # finally get the total nanoseconds for the day.
+    imulq     $3600, %rax                       # Seconds in an hour
+    imulq     $60, %rdx                         # Seconds in a minute
     addq      %rdx, %rax
     addq      %rcx, %rax
     imulq     $1000000000, %rax
     addq      timespec+8, %rax  # Add tv_nsec
     # %rax contains nanos_today
   
-    # Calculate decimal time
-    movq      $86400000000000, %rcx             # Nanoseconds per day
+    # Here is where we calculate the decimal time for the day and scale it to 0-999. Because we
+    # use nanoseconds we can try to be a bit more precise on the time.
+    #
+    # decimal_time = ((NANO_PER_DAY - nanos_today) * 1000) / NANO_PER_DAY
+    #
+    # We substract the elapsed nanoseconds from NANO_PER_DAY so we get the remaining nanoseconds
+    # then scale it to 0-999 by multiplying by 1000. Then dividing it normalizes this to a fraction
+    # of the day.
+    movq      $NANO_PER_DAY, %rcx               # Nanoseconds per day
     subq      %rax, %rcx                        # Subtract elapsed nanoseconds from total nanoseconds in day
     movq      %rcx, %rax 
     movq      $1000, %rcx
     mulq      %rcx                              # Multiply by 1000 for total decimal minutes for the day
-    movq      $86400000000000, %rcx             # Nanoseconds per day
+    movq      $NANO_PER_DAY, %rcx               # Nanoseconds per day
     xorq      %rdx, %rdx
     divq      %rcx
     # %rax contains decimal minutes
@@ -324,7 +343,9 @@ get_day_of_month:
 .L_find_month:
     xor       %rbx, %rbx                        # rbx = month index (0-11)
 
+.align 64
 .L_month_loop:
+    prefetchnta 64(%r14)
     mov       (%r14, %rbx, 4), %eax             # Load cumulative days
     cmp       %r12d, %eax
     jg        .L_month_found
@@ -436,8 +457,6 @@ print_str:
 #   %rax - integer
 #   %rsi - buffer pointer
 uint64_to_ascii:
-    push      %rbp
-    mov       %rsp, %rbp
     push      %rbx
     push      %r12
 
@@ -475,7 +494,6 @@ uint64_to_ascii:
 .L_done_to_ascii:
     pop       %r12
     pop       %rbx
-    pop       %rbp
     ret
 
 # String comparison utility function with variable length checking
@@ -485,15 +503,12 @@ uint64_to_ascii:
 #   %rsi string2
 #   %rax is return
 strn_cmp:
-    push      %rcx
     cld
     repe      cmpsb
     jne       .L_strn_cmp_ne
     xor       %rax, %rax
-    pop       %rcx
     ret
 .L_strn_cmp_ne:
-    pop       %rcx
     mov       $-1, %rax
     ret
 
