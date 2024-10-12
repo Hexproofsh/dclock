@@ -1,4 +1,4 @@
-decclock
+dclock
 ========
 
 Decimal clock that maps each day to 1000 decimal minutes.
@@ -21,7 +21,7 @@ Usage
 =====
 
 ```
-$ ./decclock
+$ ./dclock
 Decimal time: 995
 
 $

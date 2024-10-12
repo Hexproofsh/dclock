@@ -1,10 +1,10 @@
 # -----------------------------------------------------------------------------
-# decclock.s - Decimal clock that maps each day to 1000 decimal minutes.
+# dclock.s - Decimal clock that maps each day to 1000 decimal minutes.
 #
 # Build: run make
 #   or
-# as --64 -o decclock.o decclock.s
-# ld -o decclock decclock.o
+# as --64 -o dclock.o dclock.s
+# ld -o dclock dclock.o
 #
 # Implementation details from: https://jochen.link/experiments/calculateur.html
 #
@@ -37,16 +37,26 @@
 
 cumulative_days_normal:
     .long 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365
-
 cumulative_days_leap:
     .long 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366
 
 str_midnight:
      .asciz "NEW"
+str_noon:
+     .asciz " (NOON)"
+str_teatime:
+     .asciz " (TEATIME)"
+
+str_version:
+     .ascii "dclock (Decimal clock that maps each day to 1000 decimal minutes)\n\n"
+     .asciz "Written by Travis Montoya."
+str_arg_version:
+     .asciz "-v"
+str_arg_error:
+     .asciz "dclock: invalid option. valid option is -v"
 
 str_output:
      .asciz "Decimal time: "
-
 newline:
      .asciz "\n"
 
@@ -65,6 +75,21 @@ decimal_time_str:
      .globl _start
 
 _start:
+    mov       (%rsp), %r8
+    cmp       $2, %r8
+    jl        .L_print_time
+    jg        .L_print_arg_error
+
+    mov       $2, %rcx
+    lea       16(%rsp), %r9 
+    mov       (%r9), %rdi
+    lea       str_arg_version, %rsi
+    call      strn_cmp
+    test      %eax, %eax
+    jz        .L_print_version
+    jmp       .L_print_arg_error           
+
+.L_print_time:
     movq      $__NR_clock_gettime, %rax
     movq      $CLOCK_REALTIME, %rdi
     leaq      timespec, %rsi
@@ -133,11 +158,36 @@ _start:
 
     leaq      decimal_time_str, %rdi
     call      print_str
+
+    cmp       $500, %rax
+    je        .L_print_noon
+    cmp       $333, %rax
+    je        .L_print_teatime
+
     jmp       .L_exit
 
 .L_print_midnight:
-
     leaq      str_midnight, %rdi
+    call      print_str
+    jmp       .L_exit
+
+.L_print_noon:
+    leaq      str_noon, %rdi
+    call      print_str
+    jmp       .L_exit
+
+.L_print_teatime:
+    leaq      str_teatime, %rdi
+    call      print_str
+    jmp       .L_exit
+
+.L_print_version:
+    leaq      str_version, %rdi
+    call      print_str
+    jmp       .L_exit
+
+.L_print_arg_error:
+    leaq      str_arg_error, %rdi
     call      print_str
 
 .L_exit:    
@@ -163,16 +213,19 @@ get_year_from_epoch_sec:
     push      %r13
     push      %r14
 
-    # Calculate days since epoch
     mov       $86400, %rbx
     mov       %rdi, %rax
     xor       %rdx, %rdx
     div       %rbx                            # %rax = days since epoch
 
+    # 1970 is the start of the UNIX epoch. We will start subtracting from this date.
     mov       $1970, %r12                     # %r12 = year
     mov       %rax, %r13                      # %r13 = remaining days
 
 .L_year_loop:
+    # We will continually increment %r12 (year) and subtract days from %r13 until we
+    # cannot subtract anymore (366 or 365 depending on leap year) this will leave us
+    # with the current year in %rax and reamining days in %rdx
     test      %r13, %r13
     jz        .L_year_found
 
@@ -180,12 +233,15 @@ get_year_from_epoch_sec:
     call      is_leap_year
     mov       %rax, %r14                      # Store is_leap_year result
 
+    # Assume it's not a leep year
     mov       $365, %rbx
     test      %r14, %r14
     jz        .L_check_days
     mov       $366, %rbx
 
 .L_check_days:
+    # If remaining days are less than 366 or 365 we found our current year and we
+    # return the remaining days.
     cmp       %rbx, %r13
     jl        .L_year_found
     sub       %rbx, %r13
@@ -213,7 +269,7 @@ get_hms:
     pushq     %rbp
     movq      %rsp, %rbp
 
-    # Calculate hours
+    # Calculate hour for %rax as there is 3600 seconds in an hour (60 min * 60 sec)
     movq      %rdi, %rax
     movq      $3600, %rcx
     xorq      %rdx, %rdx
@@ -402,7 +458,6 @@ uint64_to_ascii:
     test      %rax, %rax
     jnz       .L_convert_digit
 
-    # Move the string to the beginning of the buffer if necessary
     cmp       %rbx, %rsi
     je        .L_done_to_ascii
 
@@ -421,5 +476,24 @@ uint64_to_ascii:
     pop       %r12
     pop       %rbx
     pop       %rbp
+    ret
+
+# String comparison utility function with variable length checking
+# Input:
+#   %rcx is length to check
+#   %rdi string1
+#   %rsi string2
+#   %rax is return
+strn_cmp:
+    push      %rcx
+    cld
+    repe      cmpsb
+    jne       .L_strn_cmp_ne
+    xor       %rax, %rax
+    pop       %rcx
+    ret
+.L_strn_cmp_ne:
+    pop       %rcx
+    mov       $-1, %rax
     ret
 

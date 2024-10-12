@@ -2,16 +2,16 @@ AS = as
 FLAGS = --64
 LD = ld
 
-all: decclock
+all: dclock
 
-decclock: decclock.o
+dclock: dclock.o
 	$(LD) -o $@ $<
 
 %.o: %.s
 	$(AS) $(FLAGS) $< -o $@
 
 clean:
-	rm -rf *.o decclock
+	rm -rf *.o dclock
 
 install:
-	cp decclock /usr/local/bin
+	cp dclock /usr/local/bin
