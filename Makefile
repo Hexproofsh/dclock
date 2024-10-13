@@ -15,3 +15,4 @@ clean:
 
 install:
 	cp dclock /usr/local/bin
+	cp dclock.conf /usr/local/etc

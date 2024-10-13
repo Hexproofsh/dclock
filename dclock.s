@@ -6,6 +6,9 @@
 # as --64 -o dclock.o dclock.s
 # ld -o dclock dclock.o
 #
+# First it looks in /usr/local/etc/dclock.conf for a UTC offset value the
+# default in the file is -6 and hardcoded is -6.
+#
 # Implementation details from: https://jochen.link/experiments/calculateur.html
 #
 # "
@@ -25,12 +28,13 @@
 .set STDOUT, 1
 
 .set __NR_clock_gettime, 228
+.set __NR_gettimeofday, 96
+.set __NR_read, 0
+.set __NR_open, 2
 .set __NR_write, 1
+.set __NR_close, 3
 
-# We will eventually change this, but for time to be accurate we need to give
-# the localtime offset. For now its set for MST with DST being set. This will
-# be set in a config file soon.
-.set TIMEZONE_OFFSET, -6 * 3600
+.set DEFAULT_TIMEZONE_OFFSET, -6 * 3600
 
 .set NANO_PER_DAY, 86400000000000
 
@@ -39,10 +43,10 @@
 
 .align 64
 cumulative_days_normal:
-    .long 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365
+     .long 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365
 .align 64
 cumulative_days_leap:
-    .long 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366
+     .long 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366
 
 str_midnight:
      .asciz "NEW"
@@ -64,6 +68,9 @@ str_output:
 newline:
      .asciz "\n"
 
+config_file:
+     .asciz "/usr/local/etc/dclock.conf"
+
      .bss
 
 # Our timespec struct for simplicity
@@ -79,6 +86,10 @@ timespec:
 decimal_time_str:
     .space 21 
 
+.align 8
+tz_buffer:
+    .space 4
+
 # ---------- CODE ----------
      .text
      .globl _start
@@ -86,7 +97,7 @@ decimal_time_str:
 _start:
     mov       (%rsp), %r8
     cmp       $2, %r8
-    jl        .L_print_time
+    jl        .L_check_config
     jg        .L_print_arg_error
 
     mov       $2, %rcx
@@ -98,17 +109,49 @@ _start:
     jz        .L_print_version
     jmp       .L_print_arg_error           
 
-.L_print_time:
+.L_check_config:
     movq      $__NR_clock_gettime, %rax
     movq      $CLOCK_REALTIME, %rdi
     leaq      timespec, %rsi
     syscall
 
+    # We check for our config file and attempt to open it and read the offset for the local
+    # timezone. If there is not one specified we default to -6 (MDT)
+    mov     $__NR_open, %rax   
+    lea     config_file, %rdi
+    xor     %rsi, %rsi         
+    mov     $0644, %rdx
+    syscall
+
+    cmp     $0, %rax
+    jl      .L_use_default_timezone
+
+    pushq   %rax
+
+    mov     %rax, %rdi         # file descriptor
+    xor     %rax, %rax           # sys_read
+    mov     $tz_buffer, %rsi
+    mov     $4, %rdx                            # Read at max 4 bytes (-12 to + 14) + null terminator
+    syscall
+
+    popq    %rdi
+    mov     $__NR_close, %rax
+    syscall
+     
+    lea     tz_buffer, %rsi
+    call    parse_config_value
+    mov     $3600, %rcx
+    imulq   %rcx
+    addq    %rax, timespec
+    jmp     .L_calculate_decimal_time
+
+.L_use_default_timezone:
     # Throughout the calls we would be calculating everything with the number of seconds/nano
     # seconds since epoch. We need to apply a timezone offset to adjust the UTC time to our
     # local timezone.
-    addq      $TIMEZONE_OFFSET, timespec
+    addq      $DEFAULT_TIMEZONE_OFFSET, timespec
 
+.L_calculate_decimal_time:
     # Get year and day of year
     movq      timespec, %rdi
     call      get_year_from_epoch_sec
@@ -171,6 +214,7 @@ _start:
     leaq      str_output, %rdi
     call      print_str
 
+    # For midnight we replace printing a number and print "NEW" to show we are in a new day.
     popq      %rax
     cmp       $1000, %rax
     je        .L_print_midnight
@@ -178,6 +222,8 @@ _start:
     leaq      decimal_time_str, %rdi
     call      print_str
 
+    # To help reference parts of the after we print the decimal time we will print a string
+    # referencing which part of the day it is. 500 = "NOON" and 333 = "TEATIME"
     cmp       $500, %rax
     je        .L_print_noon
     cmp       $333, %rax
@@ -346,6 +392,7 @@ get_day_of_month:
 .align 64
 .L_month_loop:
     prefetchnta 64(%r14)
+
     mov       (%r14, %rbx, 4), %eax             # Load cumulative days
     cmp       %r12d, %eax
     jg        .L_month_found
@@ -510,5 +557,55 @@ strn_cmp:
     ret
 .L_strn_cmp_ne:
     mov       $-1, %rax
+    ret
+
+# Parse timezone offset from config file
+# Input:
+#   %rsi buffer
+# Returns:
+#   %rax offset -12 to +14 
+parse_config_value:
+    push      %rcx
+    push      %r8
+
+    xor       %rax, %rax         # Initialize result to 0
+    xor       %rcx, %rcx         # Clear rcx for digit values
+    mov       $1, %r8            # Sign multiplier (1 for positive, -1 for negative)
+
+    # Skip leading whitespace and newlines
+.L_skip_space:
+    movzbl    (%rsi), %ecx
+    cmp       $' ', %cl
+    je        .L_next_char
+    cmp       $'\n', %cl
+    je        .L_next_char
+
+    # Check for minus sign
+    cmp       $'-', %cl
+    jne       .L_parse_loop
+    mov       $-1, %r8
+    inc       %rsi
+
+    # Pretty simple ascii parsing to integer. We get the next digit in the string
+    # subtract '0' to convert to an integer and multiply by 10 to shift to next
+    # place in the integer.
+.L_parse_loop:
+    movzbl    (%rsi), %ecx
+    sub       $'0', %cl
+    cmp       $9, %cl
+    ja        .L_done
+    imul      $10, %rax
+    add       %rcx, %rax
+    inc       %rsi
+    jmp       .L_parse_loop
+
+.L_next_char:
+    inc       %rsi
+    jmp       .L_skip_space
+
+.L_done:
+    imul      %r8, %rax      # Apply sign
+    pop       %r8
+    pop       %rcx
     ret
 

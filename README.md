@@ -27,6 +27,9 @@ Decimal time: 995
 $
 ```
 
+To change the offset or you will just get UTC decimal time copy dclock.conf to /usr/local/etc and edit it with a single
+value (EG: -6) and then save it and rerun dclock.
+
 Author
 =====
 Travis Montoya <trav@hexproof.sh>
