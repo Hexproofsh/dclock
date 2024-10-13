@@ -27,8 +27,11 @@ Decimal time: 995
 $
 ```
 
-To change the offset or you will just get UTC decimal time copy dclock.conf to /usr/local/etc and edit it with a single
-value (EG: -6) and then save it and rerun dclock.
+Configuration
+====
+If you don't change the offset for UTC time the decimal time will be wrong. To get your local time either run
+`make install` and it will copy the config to `/usr/local/etc/dclock.conf` and add your offset in the file. So
+for MDT I would add `-6` on a single line and save the file.
 
 Author
 =====
