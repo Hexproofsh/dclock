@@ -97,7 +97,7 @@ tz_buffer:
 _start:
     mov       (%rsp), %r8
     cmp       $2, %r8
-    jl        .L_check_config
+    jl        .L_get_time
     jg        .L_print_arg_error
 
     mov       $2, %rcx
@@ -109,7 +109,7 @@ _start:
     jz        .L_print_version
     jmp       .L_print_arg_error           
 
-.L_check_config:
+.L_get_time:
     movq      $__NR_clock_gettime, %rax
     movq      $CLOCK_REALTIME, %rdi
     leaq      timespec, %rsi
@@ -128,8 +128,8 @@ _start:
 
     pushq   %rax
 
-    mov     %rax, %rdi         # file descriptor
-    xor     %rax, %rax           # sys_read
+    mov     %rax, %rdi       
+    xor     %rax, %rax
     mov     $tz_buffer, %rsi
     mov     $4, %rdx                            # Read at max 4 bytes (-12 to + 14) + null terminator
     syscall
@@ -373,7 +373,7 @@ get_day_of_month:
     mov       %rdi, %r12                        # r12 = day of year
     mov       %rsi, %r13                        # r13 = year
 
-    # Check if it's a leap year
+    # Check if it's a leap year so we know which array to load for our calculations
     mov       %r13, %rdi
     call      is_leap_year
     test      %rax, %rax
@@ -389,6 +389,14 @@ get_day_of_month:
 .L_find_month:
     xor       %rbx, %rbx                        # rbx = month index (0-11)
 
+# The arrays specified have the amount of days of the year up until the current month
+# think of the cumulative arrays indexed 1-12 for the month. So we search the array
+# comparing it to the days in %rdi. The month will be the index into the array. To
+# find the days we subtract the previous months cumulative days.
+#
+# so if %rbx is our index:
+# month = first index (%rbx) where %rdi <= array[%rbx]
+# if month = 1 then day = %rdi else day = array[%rbx-1]
 .align 64
 .L_month_loop:
     prefetchnta 64(%r14)
@@ -400,6 +408,9 @@ get_day_of_month:
     cmp       $11, %rbx
     jle       .L_month_loop
 
+# Remember we need to load previous months days and subtract it from $r12 to get the
+# current day of th emonth since it's 0 indexed array if its january (0) we will inc
+# by 1 to get January to be (1) 
 .L_month_found:
     # Calculate day of month
     test      %rbx, %rbx
