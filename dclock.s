@@ -28,7 +28,6 @@
 .set STDOUT, 1
 
 .set __NR_clock_gettime, 228
-.set __NR_gettimeofday, 96
 .set __NR_read, 0
 .set __NR_open, 2
 .set __NR_write, 1
