@@ -38,6 +38,10 @@
 
 .set NANO_PER_DAY, 86400000000000
 
+.set MIDNIGHT, 999
+.set NOON, 500
+.set TEATIME, 333
+ 
 # ---------- DATA ----------
      .data
 
@@ -119,17 +123,18 @@ _start:
 
     # We check for either of the command line arguments below whether it is
     # -v to show the version or -e for expanded date format printing
-    mov       $2, %rcx
     lea       16(%rsp), %r9 
     mov       (%r9), %rdi
+    pushq     %rdi
+
+    mov       $2, %rcx
     lea       str_arg_version, %rsi
     call      strn_cmp
     test      %eax, %eax
     jz        .L_print_version
 
+    popq      %rdi
     mov       $2, %rcx
-    lea       16(%rsp), %r9
-    mov       (%r9), %rdi
     lea       str_arg_expanded, %rsi
     call      strn_cmp
     test      %eax, %eax
@@ -253,7 +258,7 @@ _start:
 
     # For midnight we replace printing a number and print "NEW" to show we are in a new day.
     popq      %rax
-    cmp       $999, %rax
+    cmp       $MIDNIGHT, %rax
     je        .L_print_midnight
 
     leaq      decimal_time_str, %rdi
@@ -261,9 +266,9 @@ _start:
 
     # To help reference parts of the after we print the decimal time we will print a string
     # referencing which part of the day it is. 500 = "NOON" and 333 = "TEATIME"
-    cmp       $500, %rax
+    cmp       $NOON, %rax
     je        .L_print_noon
-    cmp       $333, %rax
+    cmp       $TEATIME, %rax
     je        .L_print_teatime
 
     jmp       .L_exit
