@@ -17,6 +17,13 @@ time we can still use, before we get another 1000 decimal minutes."
 So I decided to write an assembly version for the computer, because what do we do here? We write everything in
 x64 assembly. Oh yeah, we also implemented our own localtime constructs :)
 
+Building
+=====
+
+Run below command to make dclock and install it to `/usr/local/bin` and copy the config to `/usr/local/etc/`
+
+`sudo make && sudo make install`
+
 Usage
 =====
 
