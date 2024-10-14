@@ -59,16 +59,28 @@ str_version:
      .asciz "Written by Travis Montoya."
 str_arg_version:
      .asciz "-v"
+str_arg_expanded:
+     .asciz "-e"
 str_arg_error:
-     .asciz "dclock: invalid option. valid option is -v"
+     .ascii "dclock: invalid option.\n"
+     .ascii "usage; dclock <option>\n"
+     .ascii "   -v    show program version information\n"
+     .asciz "   -e    show expanded information with decimal time\n"
 
+str_expanded:
+     .asciz "Date: "
 str_output:
      .asciz "Decimal time: "
 newline:
      .asciz "\n"
+dash:
+     .asciz "/"
 
 config_file:
      .asciz "/usr/local/etc/dclock.conf"
+
+show_expanded:
+     .byte 0
 
      .bss
 
@@ -83,11 +95,15 @@ timespec:
 
 .align 8
 decimal_time_str:
-    .space 21 
+    .space 21
 
 .align 8
 tz_buffer:
     .space 4
+
+.align 8
+date_buffer:
+    .space 16
 
 # ---------- CODE ----------
      .text
@@ -99,6 +115,8 @@ _start:
     jl        .L_get_time
     jg        .L_print_arg_error
 
+    # We check for either of the command line arguments below whether it is
+    # -v to show the version or -e for expanded date format printing
     mov       $2, %rcx
     lea       16(%rsp), %r9 
     mov       (%r9), %rdi
@@ -106,8 +124,16 @@ _start:
     call      strn_cmp
     test      %eax, %eax
     jz        .L_print_version
-    jmp       .L_print_arg_error           
+    #jmp       .L_print_arg_error           
 
+    mov       $2, %rcx
+    lea       16(%rsp), %r9
+    mov       (%r9), %rdi
+    lea       str_arg_expanded, %rsi
+    call      strn_cmp
+    test      %eax, %eax
+    jnz       .L_print_arg_error
+    incb      show_expanded
 .L_get_time:
     movq      $__NR_clock_gettime, %rax
     movq      $CLOCK_REALTIME, %rdi
@@ -156,6 +182,9 @@ _start:
     call      get_year_from_epoch_sec
     # %rax = year, %rdx = day of year
     
+    movq      %rax, %r8                         # We could technically do a couple pops to get this value again
+                                                # but we are potentially reusing it again pretty quick so I save
+                                                # it to a register that won't be used.
     pushq     %rax
     pushq     %rdx
     
@@ -166,7 +195,47 @@ _start:
     
     pushq     %rax
     pushq     %rdx
-    
+
+    # dclocks "expanded" form shows the month/day/year before we show the
+    # decimal time. So we check if it was passed as an argument and then
+    # print out the date information below. If not we just jump to print
+    # the decimal time.
+    cmpb      $1, show_expanded
+    jne       .L_not_expanded
+
+    lea       str_expanded, %rdi
+    call      print_str
+ 
+    # rax = month
+    # rdx = day of the month
+    # r8  = year
+    lea       date_buffer, %rsi
+    call      uint64_to_ascii
+    lea       date_buffer, %rdi
+    call      print_str
+
+    lea       dash, %rdi
+    call      print_str
+
+    mov       %rdx, %rax
+    lea       date_buffer, %rsi
+    call      uint64_to_ascii
+    lea       date_buffer, %rdi
+    call      print_str
+
+    lea       dash, %rdi
+    call      print_str
+
+    mov       %r8, %rax
+    lea       date_buffer, %rsi
+    call      uint64_to_ascii
+    lea       date_buffer, %rdi
+    call      print_str
+
+    lea       newline, %rdi
+    call      print_str
+
+.L_not_expanded:
     # Get hours, minutes, seconds
     movq      timespec, %rax
     movq      $86400, %rcx
@@ -215,7 +284,7 @@ _start:
 
     # For midnight we replace printing a number and print "NEW" to show we are in a new day.
     popq      %rax
-    cmp       $1000, %rax
+    cmp       $999, %rax
     je        .L_print_midnight
 
     leaq      decimal_time_str, %rdi
@@ -370,6 +439,7 @@ get_day_of_month:
     push      %r14
 
     mov       %rdi, %r12                        # r12 = day of year
+    inc       %r12                              # Adjust day of year to 1-indexed
     mov       %rsi, %r13                        # r13 = year
 
     # Check if it's a leap year so we know which array to load for our calculations
@@ -516,6 +586,8 @@ print_str:
 uint64_to_ascii:
     push      %rbx
     push      %r12
+    push      %rcx
+    push      %rdx
 
     mov       %rsi, %rbx                        # Save original buffer pointer
     mov       $10, %rcx
@@ -549,6 +621,8 @@ uint64_to_ascii:
     jle       .L_strcpy
 
 .L_done_to_ascii:
+    pop       %rdx
+    pop       %rcx
     pop       %r12
     pop       %rbx
     ret

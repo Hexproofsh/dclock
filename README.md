@@ -24,7 +24,9 @@ Usage
 $ ./dclock
 Decimal time: 995
 
-$
+$ ./dclock -e
+Date: 10/14/2024
+Decimal time: 977
 ```
 
 Configuration
