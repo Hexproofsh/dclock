@@ -32,6 +32,7 @@
 .set __NR_open, 2
 .set __NR_write, 1
 .set __NR_close, 3
+.set __NR_exit, 60
 
 .set DEFAULT_TIMEZONE_OFFSET, -6 * 3600
 
@@ -65,7 +66,7 @@ str_arg_error:
      .ascii "dclock: invalid option.\n"
      .ascii "usage; dclock <option>\n"
      .ascii "   -v    show program version information\n"
-     .asciz "   -e    show expanded information with decimal time\n"
+     .asciz "   -e    show expanded information with decimal time"
 
 str_expanded:
      .asciz "Date: "
@@ -80,7 +81,8 @@ config_file:
      .asciz "/usr/local/etc/dclock.conf"
 
 show_expanded:
-     .byte 0
+     # 0 = normal, 1 = expanded
+     .byte 0 
 
      .bss
 
@@ -202,39 +204,7 @@ _start:
     # the decimal time.
     cmpb      $1, show_expanded
     jne       .L_not_expanded
-
-    lea       str_expanded, %rdi
-    call      print_str
- 
-    # rax = month
-    # rdx = day of the month
-    # r8  = year
-    lea       date_buffer, %rsi
-    call      uint64_to_ascii
-    lea       date_buffer, %rdi
-    call      print_str
-
-    lea       dash, %rdi
-    call      print_str
-
-    mov       %rdx, %rax
-    lea       date_buffer, %rsi
-    call      uint64_to_ascii
-    lea       date_buffer, %rdi
-    call      print_str
-
-    lea       dash, %rdi
-    call      print_str
-
-    mov       %r8, %rax
-    lea       date_buffer, %rsi
-    call      uint64_to_ascii
-    lea       date_buffer, %rdi
-    call      print_str
-
-    lea       newline, %rdi
-    call      print_str
-
+    call      .L_print_expanded
 .L_not_expanded:
     # Get hours, minutes, seconds
     movq      timespec, %rax
@@ -299,6 +269,42 @@ _start:
 
     jmp       .L_exit
 
+# This needs to be called and not jumped to
+.L_print_expanded:
+    lea       str_expanded, %rdi
+    call      print_str
+
+    # rax = month
+    # rdx = day of the month
+    # r8  = year
+    lea       date_buffer, %rsi
+    call      uint64_to_ascii
+    lea       date_buffer, %rdi
+    call      print_str
+
+    lea       dash, %rdi
+    call      print_str
+
+    mov       %rdx, %rax
+    lea       date_buffer, %rsi
+    call      uint64_to_ascii
+    lea       date_buffer, %rdi
+    call      print_str
+
+    lea       dash, %rdi
+    call      print_str
+
+    mov       %r8, %rax
+    lea       date_buffer, %rsi
+    call      uint64_to_ascii
+    lea       date_buffer, %rdi
+    call      print_str
+
+    lea       newline, %rdi
+    call      print_str
+
+    ret
+
 .L_print_midnight:
     leaq      str_midnight, %rdi
     call      print_str
@@ -328,8 +334,8 @@ _start:
     leaq      newline, %rdi
     call      print_str
 
-    mov       $60, %rax
-    mov       $0, %rdi
+    mov       $__NR_exit, %rax
+    xor       %rdi, %rdi
     syscall
 
 # ---------- FUNCTIONS ----------
