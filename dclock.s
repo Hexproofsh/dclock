@@ -126,7 +126,6 @@ _start:
     call      strn_cmp
     test      %eax, %eax
     jz        .L_print_version
-    #jmp       .L_print_arg_error           
 
     mov       $2, %rcx
     lea       16(%rsp), %r9

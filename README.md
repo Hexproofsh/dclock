@@ -27,6 +27,9 @@ Run below command to make dclock and install it to `/usr/local/bin` and copy the
 Usage
 =====
 
+You can run dclock without any arguments to show the current decimal time or you can pass `-e` to show the
+current date as well.
+
 ```
 $ ./dclock
 Decimal time: 995
