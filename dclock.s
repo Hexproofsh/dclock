@@ -351,6 +351,8 @@ _start:
 # Output: 
 #   %rax - current year, %rdx - remaining days in year
 get_year_from_epoch_sec:
+    pushq     %rbp
+    movq      %rsp, %rbp
     push      %rbx
     push      %r12
     push      %r13
@@ -399,6 +401,7 @@ get_year_from_epoch_sec:
     pop       %r13
     pop       %r12
     pop       %rbx
+    popq      %rbp
     ret
 
 # Function: get_hms (Get Hours, Minutes, Seconds)
@@ -443,6 +446,8 @@ get_hms:
 #   %rax - month (1-12)
 #   %rdx - day of month (1-31)
 get_day_of_month:
+    pushq     %rbp
+    movq      %rsp, %rbp
     push      %rbx
     push      %r12
     push      %r13
@@ -509,6 +514,7 @@ get_day_of_month:
     pop       %r13
     pop       %r12
     pop       %rbx
+    popq      %rbp
     ret
 
 # Function: is_leap_year
