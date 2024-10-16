@@ -84,10 +84,6 @@ dash:
 config_file:
      .asciz "/usr/local/etc/dclock.conf"
 
-show_expanded:
-     # 0 = normal, 1 = expanded
-     .byte 0 
-
      .bss
 
 # Our timespec struct for simplicity
@@ -133,13 +129,14 @@ _start:
     test      %eax, %eax
     jz        .L_print_version
 
+    xor       %r15, %r15                        # This will hold our expanded bit
     popq      %rdi
     mov       $2, %rcx
     lea       str_arg_expanded, %rsi
     call      strn_cmp
     test      %eax, %eax
     jnz       .L_print_arg_error
-    incb      show_expanded
+    inc       %r15
 .L_get_time:
     movq      $__NR_clock_gettime, %rax
     movq      $CLOCK_REALTIME, %rdi
@@ -206,7 +203,7 @@ _start:
     # decimal time. So we check if it was passed as an argument and then
     # print out the date information below. If not we just jump to print
     # the decimal time.
-    cmpb      $1, show_expanded
+    cmp       $1, %r15
     jne       .L_not_expanded
     call      .L_print_expanded
 .L_not_expanded:
