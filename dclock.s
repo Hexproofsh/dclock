@@ -129,7 +129,7 @@ _start:
     test      %eax, %eax
     jz        .L_print_version
 
-    xor       %r15, %r15                        # This will hold our expanded bit
+    xor       %r15, %r15                        # This will hold our expanded bit, do not modify.
     popq      %rdi
     mov       $2, %rcx
     lea       str_arg_expanded, %rsi
@@ -375,11 +375,12 @@ get_year_from_epoch_sec:
     call      is_leap_year
     mov       %rax, %r14                      # Store is_leap_year result
 
+debugme:
     # Assume it's not a leep year
     mov       $365, %rbx
     test      %r14, %r14
     jz        .L_check_days
-    mov       $366, %rbx
+    inc       %rbx
 
 .L_check_days:
     # If remaining days are less than 366 or 365 we found our current year and we
