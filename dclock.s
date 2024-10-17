@@ -481,7 +481,7 @@ get_day_of_month:
 #
 # so if %rbx is our index:
 # month = first index (%rbx) where %rdi <= array[%rbx]
-# if month = 1 then day = %rdi else day = array[%rbx-1]
+# so if month = 1 then day = %rdi else day = array[%rbx-1]
 .align 64
 .L_month_loop:
     prefetchnta 64(%r14)
@@ -572,20 +572,18 @@ is_leap_year:
 # We need to find the length of the string first and then print using
 # syscall __NR_write (sys_write) 
 print_str:
-    push      %rcx
     push      %rax
     push      %rdx
 
-    xor       %rcx, %rcx
+    xor       %rdx, %rdx
 .L_strlen:
-    movb      (%rdi, %rcx), %al
+    movb      (%rdi, %rdx), %al
     test      %al, %al
     jz        .L_write
-    inc       %rcx
+    inc       %rdx
     jmp       .L_strlen
 .L_write:
-    # At this point %rcx holds the length of the null terminated string
-    mov       %rcx, %rdx
+    # %rdx holds the length of the null terminated string
     mov       %rdi, %rsi
     mov       $STDOUT, %rdi
     mov       $__NR_write, %rax
@@ -593,7 +591,6 @@ print_str:
 
     pop       %rdx
     pop       %rax
-    pop       %rcx
     ret
 
 # Convert unsigned 64-bit integer to ASCII
