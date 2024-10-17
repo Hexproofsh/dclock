@@ -21,7 +21,9 @@
 # "
 # 
 # Here it is in GNU x64 assembly form.
+#
 # Code is 100% free and public domain.
+#
 # Travis Montoya <trav@hexproof.sh>
 # -----------------------------------------------------------------------------
 .set CLOCK_REALTIME, 0
@@ -34,9 +36,11 @@
 .set __NR_close, 3
 .set __NR_exit, 60
 
-.set DEFAULT_TIMEZONE_OFFSET, -6 * 3600
-
+.set SEC_IN_HR, 3600
+.set SEC_IN_DAY, 86400
 .set NANO_PER_DAY, 86400000000000
+
+.set DEFAULT_TIMEZONE_OFFSET, -6 * SEC_IN_HR
 
 .set MIDNIGHT, 999
 .set NOON, 500
@@ -168,7 +172,7 @@ _start:
      
     lea     tz_buffer, %rsi
     call    parse_config_value
-    mov     $3600, %rcx
+    mov     $SEC_IN_HR, %rcx
     imulq   %rcx
     addq    %rax, timespec
     jmp     .L_calculate_decimal_time
@@ -209,7 +213,7 @@ _start:
 .L_not_expanded:
     # Get hours, minutes, seconds
     movq      timespec, %rax
-    movq      $86400, %rcx
+    movq      $SEC_IN_DAY, %rcx
     xorq      %rdx, %rdx
     divq      %rcx                              # %rdx = seconds of the day
     movq      %rdx, %rdi
@@ -219,7 +223,7 @@ _start:
     # We decided on nanoseconds instead of ms for precision (as much as we could) and we break
     # down the hour, minutes to seconds and add them to the remaining seconds in %rcx so we can
     # finally get the total nanoseconds for the day.
-    imulq     $3600, %rax                       # Seconds in an hour
+    imulq     $SEC_IN_HR, %rax                       # Seconds in an hour
     imulq     $60, %rdx                         # Seconds in a minute
     addq      %rdx, %rax
     addq      %rcx, %rax
@@ -355,7 +359,7 @@ get_year_from_epoch_sec:
     push      %r13
     push      %r14
 
-    mov       $86400, %rbx
+    mov       $SEC_IN_DAY, %rbx
     mov       %rdi, %rax
     xor       %rdx, %rdx
     div       %rbx                            # %rax = days since epoch
@@ -375,7 +379,6 @@ get_year_from_epoch_sec:
     call      is_leap_year
     mov       %rax, %r14                      # Store is_leap_year result
 
-debugme:
     # Assume it's not a leep year
     mov       $365, %rbx
     test      %r14, %r14
@@ -415,7 +418,7 @@ get_hms:
 
     # Calculate hour for %rax as there is 3600 seconds in an hour (60 min * 60 sec)
     movq      %rdi, %rax
-    movq      $3600, %rcx
+    movq      $SEC_IN_HR, %rcx
     xorq      %rdx, %rdx
     divq      %rcx
     # %rax contains hours
